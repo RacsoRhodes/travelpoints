@@ -190,8 +190,11 @@
 
 	This mod is for Minetest 0.4.8 or the latest build.
 	
-	Extract or move the extracted directory "travelpoints" into the "mods"
-	directory of your Minetest installation.
+	Extract archive, and rename directory "travelpoints-master" to
+	"travelpoints".
+
+	Move the extracted directory "travelpoints" into the "mods"	directory of
+	your Minetest installation.
 	
 --------------------------------------------------------------------------------
 04. Textures
@@ -207,7 +210,7 @@
 
 		256 https://github.com/RacsoRhodes/travelpoints-textures-256/archive/master.zip
 
-		512	https://github.com/RacsoRhodes/travelpoints-textures-512/archive/master.zip
+		512 https://github.com/RacsoRhodes/travelpoints-textures-512/archive/master.zip
 	
 	Install
 
