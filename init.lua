@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.3                            2015-03-24
+-- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
 --
 -- By Racso Rhodes
 --
@@ -23,7 +23,10 @@
 --
 --		/tpback
 --		/tpdrop
+--		/tpgdrop
+--		/tpggo
 --		/tpgo
+--		/tpgset
 --		/travelpads
 --		/travelpoints
 --		/tpset
@@ -36,7 +39,8 @@
 
 -- Register privilege - travelpoints.
 --
--- This allows usage of the "bookmarking" features of Travelpoints.
+-- This allows users to set, drop and use their own travelpoints.
+-- Also allows usage of global travelpoints.
 --
 minetest.register_privilege("travelpoints", "Can use the Travelpoints chat commands.")
 
@@ -45,6 +49,12 @@ minetest.register_privilege("travelpoints", "Can use the Travelpoints chat comma
 -- This allows the placing of travelpoints:tansporter_pad nodes.
 --
 minetest.register_privilege("travelpads", "Can place Travelpoint Transporter Pads.")
+
+-- Register privilege - tpglobal
+--
+-- This allows the saving and dropping of global travelpoints.
+--
+minetest.register_privilege("tpglobal", "Can set and drop global travelpoints.")
 
 -- Initialize mod table.
 travelpoints = {}
@@ -65,10 +75,10 @@ travelpoints.travelpoints_tables = travelpoints.worldpath .. travelpoints.delimi
 os.execute("mkdir \"" .. travelpoints.travelpoints_tables .. "\"")
 
 -- Set version for /travelpoints.
-travelpoints.version_number = "1.3"
+travelpoints.version_number = "1.4"
 
 -- Set version date for /travelpoints.
-travelpoints.version_date = "2015-03-24"
+travelpoints.version_date = "2015-03-27"
 
 -- Initialize restrictions table.
 travelpoints.restrictions = {}
@@ -103,7 +113,7 @@ minetest.register_chatcommand("tpback", {
 	func = function(name, param)
 
 		-- Get travelpoints_table.
-		local travelpoints_table = travelpoints.get_travelpoints_table(name)
+		local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
 
 		-- Check for return location.
 		if not travelpoints_table._back then
@@ -123,7 +133,7 @@ minetest.register_chatcommand("tpback", {
 		-- Clear return location.
 		if travelpoints.restrictions.clear_back_pos > 0 then
 			travelpoints_table._back = nil
-			travelpoints.save_travelpoints_table(name, travelpoints_table)
+			travelpoints.save_travelpoints_table("user", name, travelpoints_table)
 		end
 
 	end,
@@ -155,7 +165,7 @@ minetest.register_chatcommand("tpdrop", {
 		elseif param == "all" then
 
 			-- Get travelpoints_table.
-			local travelpoints_table = travelpoints.get_travelpoints_table(name)
+			local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
 
 			-- Initialize new travelpoints_table.
 			local tpt = {}
@@ -171,7 +181,7 @@ minetest.register_chatcommand("tpdrop", {
 			end
 
 			-- Overwrite existing travelpoints_table with new table.
-			if travelpoints.save_travelpoints_table(name, tpt) then
+			if travelpoints.save_travelpoints_table("user", name, tpt) then
 
 				-- Report success.
 				travelpoints.print_notice(name, "You have removed all of your travelpoints for this world." )
@@ -201,7 +211,7 @@ minetest.register_chatcommand("tpdrop", {
 			end
 
 			-- Get travelpoints_table.
-			local travelpoints_table = travelpoints.get_travelpoints_table(name)
+			local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
 
 			-- Check if <title> is a valid travelpoint.
 			if travelpoints_table[title] == nil then
@@ -213,7 +223,7 @@ minetest.register_chatcommand("tpdrop", {
 			travelpoints_table[title] = nil
 
 			-- Save travelpoints_table.
-			if travelpoints.save_travelpoints_table(name, travelpoints_table) then
+			if travelpoints.save_travelpoints_table("user", name, travelpoints_table) then
 
 				-- Report success.
 				travelpoints.print_notice(name, "Travelpoint \"" .. title .. "\" has been removed." )
@@ -222,6 +232,246 @@ minetest.register_chatcommand("tpdrop", {
 
 				-- Report error.
 				travelpoints.print_notice(name, "Error: Travelpoint \"" .. title .. "\" could not be removed.")
+
+			end
+
+		end
+
+	end,
+})
+
+--[/tpgdrop]--------------------------------------------------------------------
+--
+--	Removes global travelpoints, or all if specified.
+--
+minetest.register_chatcommand("tpgdrop", {
+	params = "<title> | all",
+	description = "Removes the global travelpoint specified by <title>. To remove all global travelpoints for this world, use \"/tpgdrop all\".",
+	privs = {tpglobal=true},
+	func = function(name, param)
+
+		------------------------------------------------------------------------
+		--	/tpgdrop
+		------------------------------------------------------------------------
+		if param == "" then
+
+			travelpoints.print_notice(name, "Error: No travelpoint was specified.")
+
+			return
+
+		------------------------------------------------------------------------
+		--	/tpgdrop all
+		------------------------------------------------------------------------
+		elseif param == "all" then
+
+			-- Check if user has server privilege.
+			if minetest.get_player_privs(name)["server"] then
+			
+				-- Get travelpoints table.
+				local travelpoints_table = travelpoints.get_travelpoints_table("global", name)
+
+				-- Initialize new travelpoints table.
+				local tpt = {}
+
+				-- Overwrite existing travelpoints table with new table.
+				if travelpoints.save_travelpoints_table("global", name, tpt) then
+
+					-- Report success.
+					travelpoints.print_notice(name, "You have removed all global travelpoints for this world." )
+
+				else
+
+					-- Report error.
+					travelpoints.print_notice(name, "Error: Global travelpoints for this world could not be removed.")
+
+				end
+
+				return
+
+			else
+				
+				-- Report error.
+				travelpoints.print_notice(name, "Server privilege required to drop all global travelpoints.")
+				
+			end
+		
+		------------------------------------------------------------------------
+		--	/tpgdrop <title>
+		------------------------------------------------------------------------
+		else
+
+			-- Get Title.
+			local title = string.match(param, "^([^ ]+)%s*")
+
+			-- Validate Title.
+			local notice = travelpoints.validate_title(title)
+			if notice ~= nil then
+				travelpoints.print_notice(name, notice)
+				return
+			end
+
+			-- Get travelpoints_table.
+			local travelpoints_table = travelpoints.get_travelpoints_table("global", name)
+
+			-- Check if <title> is a valid travelpoint.
+			if travelpoints_table[title] == nil then
+				travelpoints.print_notice(name, "Error: Global travelpoint \""  .. title .. "\" does not exist.")
+				return
+			end
+
+			-- Remove travelpoint from table.
+			travelpoints_table[title] = nil
+
+			-- Save travelpoints_table.
+			if travelpoints.save_travelpoints_table("global", name, travelpoints_table) then
+
+				-- Report success.
+				travelpoints.print_notice(name, "Global travelpoint \"" .. title .. "\" has been removed." )
+
+			else
+
+				-- Report error.
+				travelpoints.print_notice(name, "Error: Global travelpoint \"" .. title .. "\" could not be removed.")
+
+			end
+
+		end
+
+	end,
+})
+
+--[/tpggo]-----------------------------------------------------------------------
+--
+--	Teleports player to specified global travelpoint, or displays available
+--	global travelpoints if no title given.
+--
+minetest.register_chatcommand("tpggo", {
+	params = "(nothing) | <title>",
+	description = "Teleports you to the specified global travelpoint. If no travelpoint given, a list of available global travelpoints is displayed.",
+	privs = {travelpoints=true},
+	func = function(name, param)
+
+		-- Get global travelpoints table.
+		local global_travelpoints_table = travelpoints.get_travelpoints_table("global", name)
+
+		-- Get player's travelpoints table.
+		local user_travelpoints_table = travelpoints.get_travelpoints_table("user", name)
+		
+		-- Assume no cooldown until calculated otherwise.
+		local cooldown_remaining = "none"
+
+		-- Get current time.
+		local now = os.time()
+
+		-- Check if coodown needs to be calculated.
+		if ( not minetest.is_singleplayer() ) and ( travelpoints.restrictions.cooldown > 0 ) and ( not minetest.get_player_privs(name)["server"] ) then
+
+			if user_travelpoints_table._cooldown ~= nil then
+
+				-- Cooldown timestamp.
+				local coolstamp = user_travelpoints_table._cooldown
+
+				-- Seconds since cooldown timestamp.
+				local seconds_since = ( now - coolstamp )
+
+				-- Check if seconds since last /tpgo <title> or /tpggo <title>
+				-- is less than cooldown time.
+				if seconds_since < travelpoints.restrictions.cooldown then
+
+					-- Get time remaining for cooldown.
+					cooldown_remaining = travelpoints.get_duration(travelpoints.restrictions.cooldown - seconds_since)
+
+				end
+
+			end
+
+		end
+
+		------------------------------------------------------------------------
+		--	/tpggo
+		------------------------------------------------------------------------
+		if param == "" then
+
+			-- Get travelpoints array.
+			local travelpoints_array = travelpoints.get_travelpoints_array("global", name)
+
+			-- Check if there are any travelpoints.
+			if #travelpoints_array > 0 then
+
+				-- Begin output.
+				travelpoints.print_notice(name, "Available global travelpoints:")
+
+				-- Step through travelpoints_array.
+				for index, value in ipairs(travelpoints_array) do
+
+					-- Extract title from value: "<title> (<x>, <y>, <z>)"
+					local title = string.match(value, "^([^ ]+)%s+")
+
+					-- Output lines.
+					-- <n>. <title> (<x>, <y>, <z>). Saved on <date> at <time>. Descripton: <desc>
+					travelpoints.print_notice(name, index .. ". \"" .. title .. "\" " .. minetest.pos_to_string(global_travelpoints_table[title].pos) .. ". Saved on " .. os.date("%Y-%m-%d at %I:%M:%S %p", global_travelpoints_table[title].timestamp) .. ". Description: " .. global_travelpoints_table[title].desc)
+
+				end
+
+			else
+				travelpoints.print_notice(name, "There are no saved global travelpoints.")
+			end
+
+			-- Cooldown remaining.
+			if cooldown_remaining ~= "none" then
+				travelpoints.print_notice(name, "Your remaining cooldown is: " .. cooldown_remaining .. ".")
+			end
+
+			return
+
+		------------------------------------------------------------------------
+		--	/tpggo <title>
+		------------------------------------------------------------------------
+		else
+
+			-- Check if player is on cooldown.
+			if cooldown_remaining == "none" then
+
+				-- Get Title.
+				local title = string.match(param, "^([^ ]+)%s*")
+
+				-- Validate Title.
+				local notice = travelpoints.validate_title(title)
+				if notice ~= nil then
+					travelpoints.print_notice(name, notice)
+					return
+				end
+
+				-- Check for specified travelpoint.
+				if not global_travelpoints_table[title] then
+					travelpoints.print_notice(name, "Error: Global travelpoint \"" .. title .. "\"does not exist.")
+					return
+				end
+
+				-- Set location for /tpback
+				user_travelpoints_table._back = travelpoints.get_location(name)
+
+				-- Get player.
+				local player = minetest.get_player_by_name(name)
+
+				-- Teleport player.
+				player:setpos(global_travelpoints_table[title].pos)
+
+				-- Report.
+				travelpoints.print_notice(name, "Teleported to global travelpoint: \"" .. title .. "\". Use /tpback to return to " .. minetest.pos_to_string(user_travelpoints_table._back) .. "." )
+
+				-- Set cooldown if needed.
+				if ( not minetest.is_singleplayer() ) and ( travelpoints.restrictions.cooldown > 0 ) then
+					user_travelpoints_table._cooldown = now
+				end
+
+				-- Save player's travelpoints table.
+				travelpoints.save_travelpoints_table("user", name, user_travelpoints_table)
+
+			else
+
+				-- Report
+				travelpoints.print_notice(name, "Time remaining on your cooldown: " .. cooldown_remaining .. ".")
 
 			end
 
@@ -242,7 +492,7 @@ minetest.register_chatcommand("tpgo", {
 	func = function(name, param)
 
 		-- Get travelpoints_table.
-		local travelpoints_table = travelpoints.get_travelpoints_table(name)
+		local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
 
 		-- Assume no cooldown until calculated otherwise.
 		local cooldown_remaining = "none"
@@ -279,13 +529,10 @@ minetest.register_chatcommand("tpgo", {
 		if param == "" then
 
 			-- Get travelpoints_array.
-			local travelpoints_array = travelpoints.get_travelpoints_array(name)
-
-			-- Get travelpoint count.
-			local tp_count = #travelpoints_array - 1
+			local travelpoints_array = travelpoints.get_travelpoints_array("user", name)
 
 			-- Check if player has any travelpoints.
-			if tp_count > 0 then
+			if #travelpoints_array > 0 then
 
 				-- Begin output.
 				travelpoints.print_notice(name, "Your available travelpoints:")
@@ -293,18 +540,12 @@ minetest.register_chatcommand("tpgo", {
 				-- Step through travelpoints_array.
 				for index, value in ipairs(travelpoints_array) do
 
-					-- Omit first index (used for
-					-- travelpoints:transporter_pad/_active's formspec)
-					if index > 1 then
+					-- Extract title from value: "<title> (<x>, <y>, <z>)"
+					local title = string.match(value, "^([^ ]+)%s+")
 
-						-- Extract title from value: "<title> (<x>, <y>, <z>)"
-						local title = string.match(value, "^([^ ]+)%s+")
-
-						-- Output lines.
-						-- <n>. <title> (<x>, <y>, <z>). Saved on <date> at <time>. Descripton: <desc>
-						travelpoints.print_notice(name, index - 1 .. ". \"" .. title .. "\" " .. minetest.pos_to_string(travelpoints_table[title].pos) .. ". Saved on " .. os.date("%Y-%m-%d at %I:%M:%S %p", travelpoints_table[title].timestamp) .. ". Description: " .. travelpoints_table[title].desc)
-
-					end
+					-- Output lines.
+					-- <n>. <title> (<x>, <y>, <z>). Saved on <date> at <time>. Descripton: <desc>
+					travelpoints.print_notice(name, index .. ". \"" .. title .. "\" " .. minetest.pos_to_string(travelpoints_table[title].pos) .. ". Saved on " .. os.date("%Y-%m-%d at %I:%M:%S %p", travelpoints_table[title].timestamp) .. ". Description: " .. travelpoints_table[title].desc)
 
 				end
 
@@ -377,12 +618,99 @@ minetest.register_chatcommand("tpgo", {
 				end
 
 				-- Save travelpoints_table.
-				travelpoints.save_travelpoints_table(name, travelpoints_table)
+				travelpoints.save_travelpoints_table("user", name, travelpoints_table)
 
 			else
 
 				-- Report
 				travelpoints.print_notice(name, "Time remaining on your cooldown: " .. cooldown_remaining .. ".")
+
+			end
+
+		end
+
+	end,
+})
+
+--[/tpgset]---------------------------------------------------------------------
+--
+--	Adds a new travelpoint to the world's global travelpoints table.
+--
+minetest.register_chatcommand("tpgset", {
+	params = "<title> | <title> <desc>",
+	description = "Set a new global travelpoint at your current location. Title required, description optional.",
+	privs = {tpglobal=true},
+	func = function(name, param)
+
+		------------------------------------------------------------------------
+		--	/tpgset
+		------------------------------------------------------------------------
+
+		if param == "" then
+			travelpoints.print_notice(name, "Error: Travelpoint must be saved with a title.")
+			return
+		else
+
+			--------------------------------------------------------------------
+			--	/tpgset <title> | <title> <desc>
+			--------------------------------------------------------------------
+
+			local title, desc, notice, pos
+
+			-- Get parameters.
+			if string.find(param, "^[^ ]+%s+.+") then
+				title, desc = string.match(param, "^([^ ]+)%s+(.+)")
+			else
+				title = param
+				desc = ""
+			end
+
+			-- Validate Title.
+			if title ~= nil then
+				notice = travelpoints.validate_title(title)
+				if notice ~= nil then
+					travelpoints.print_notice(name, notice)
+					return
+				end
+			end
+
+			-- Validate Description.
+			if desc ~= "" then
+				notice = travelpoints.validate_desc(desc)
+				if notice ~= nil then
+					travelpoints.print_notice(name, notice)
+					return
+				end
+			end
+
+			-- Get player's location.
+			pos = travelpoints.get_location(name)
+
+			-- Initialize temporary travelpoint table.
+			local travelpoint = {}
+
+			-- Build travelpoint table.
+			travelpoint.pos = pos
+			travelpoint.desc = desc
+			travelpoint.timestamp = os.time()
+
+			-- Get travelpoints_table.
+			local travelpoints_table = travelpoints.get_travelpoints_table("global", name)
+
+			-- Check for duplicate title.
+			if travelpoints_table[title] ~= nil then
+				travelpoints.print_notice(name, "Error: A global travelpoint already exists for this title: " .. title)
+			else
+
+				-- Merge tables.
+				travelpoints_table[title] = travelpoint
+
+				-- Save travelpoints_table.
+				if travelpoints.save_travelpoints_table("global", name, travelpoints_table) then
+					travelpoints.print_notice(name, "Global travelpoint \"" .. title .. "\" has been saved.")
+				else
+					travelpoints.print_notice(name, "Error: Global travelpoint \"" .. title .. "\" could not be saved.")
+				end
 
 			end
 
@@ -402,7 +730,7 @@ minetest.register_chatcommand("travelpads", {
 	func = function(name, param)
 
 		-- Get travelpoints_table.
-		local travelpoints_table = travelpoints.get_travelpoints_table(name)
+		local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
 
 		-- Initialize array
 		local travelpads = {}
@@ -481,25 +809,31 @@ minetest.register_chatcommand("travelpoints", {
 				local player_cooldown = "none"
 				local travelpads = {}
 				local tpback
-				local travelpoints_table = travelpoints.get_travelpoints_table(name)
-				local travelpoints_array = travelpoints.get_travelpoints_array(name)
+				local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
+				local travelpoints_array = travelpoints.get_travelpoints_array("user", name)
 
 				-- Max travelpoints
-				if travelpoints.restrictions.max_travelpoints == 0 then
+				if minetest.get_player_privs(name)["server"] then
+					max_travelpoints = "No limit (server privilege)"
+				elseif travelpoints.restrictions.max_travelpoints == 0 then
 					max_travelpoints = "No limit"
 				else
 					max_travelpoints = travelpoints.restrictions.max_travelpoints
 				end
 
 				-- Max travelpads
-				if travelpoints.restrictions.max_travelpads == 0 then
+				if minetest.get_player_privs(name)["server"] then
+					max_travelpads = "No limit (server privilege)"
+				elseif travelpoints.restrictions.max_travelpads == 0 then
 					max_travelpads = "No limit"
 				else
 					max_travelpads = travelpoints.restrictions.max_travelpads
 				end
 
 				-- Cooldown
-				if travelpoints.restrictions.cooldown == 0 then
+				if minetest.get_player_privs(name)["server"] then
+					cooldown = "No cooldown (server privilege)"
+				elseif travelpoints.restrictions.cooldown == 0 then
 					cooldown = "No cooldown"
 				else
 					cooldown = travelpoints.get_duration(travelpoints.restrictions.cooldown)
@@ -533,7 +867,7 @@ minetest.register_chatcommand("travelpoints", {
 				-- Report
 				travelpoints.print_notice(name, "Running Travelpoints version " .. travelpoints.version_number .. " released on " .. travelpoints.version_date .. ".")
 				travelpoints.print_notice(name, "Restrictions:")
-				travelpoints.print_notice(name, "Max Travelpoints: [" .. max_travelpoints .. "] You have: [" .. #travelpoints_array - 1 .. "]")
+				travelpoints.print_notice(name, "Max Travelpoints: [" .. max_travelpoints .. "] You have: [" .. #travelpoints_array .. "]")
 				travelpoints.print_notice(name, "Max Transporter Pads: [" .. max_travelpads .. "] You have: [" .. #travelpads .. "]")
 				travelpoints.print_notice(name, "Cooldown: [" .. cooldown .. "] Your cooldown is: [" .. player_cooldown .. "]")
 				travelpoints.print_notice(name, "Back Location: [" .. tpback .. "]")
@@ -702,7 +1036,7 @@ minetest.register_chatcommand("tpset", {
 		--	/tpset <title> | <title> <desc>
 		------------------------------------------------------------------------
 
-			local tp_count = #travelpoints.get_travelpoints_array(name) - 1
+			local tp_count = #travelpoints.get_travelpoints_array("user", name)
 
 			-- Handle maximum_travelpoints if it is configured.
 			if ( not minetest.is_singleplayer() ) and ( travelpoints.restrictions.max_travelpoints > 0 ) and ( tp_count >= travelpoints.restrictions.max_travelpoints ) and ( not minetest.get_player_privs(name)["server"] ) then
@@ -753,7 +1087,7 @@ minetest.register_chatcommand("tpset", {
 				travelpoint.timestamp = os.time()
 
 				-- Get travelpoints_table.
-				local travelpoints_table = travelpoints.get_travelpoints_table(name)
+				local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
 
 				-- Check for duplicate title.
 				if travelpoints_table[title] ~= nil then
@@ -764,7 +1098,7 @@ minetest.register_chatcommand("tpset", {
 					travelpoints_table[title] = travelpoint
 
 					-- Save travelpoints_table.
-					if travelpoints.save_travelpoints_table(name, travelpoints_table) then
+					if travelpoints.save_travelpoints_table("user", name, travelpoints_table) then
 						travelpoints.print_notice(name, "Travelpoint \"" .. title .. "\" has been saved.")
 					else
 						travelpoints.print_notice(name, "Error: Travelpoint \"" .. title .. "\" could not be saved.")

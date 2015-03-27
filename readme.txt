@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.3                            2015-03-24
+-- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
 --
 -- By Racso Rhodes
 --
@@ -44,6 +44,15 @@
 --
 --		6.0 /travelpads
 --
+--		7.0 /tpgset <title>
+--		7.1 /tpgset <title> <desc>
+--
+--		8.0 /tpggo
+--		8.1 /tpggo <title>
+--
+--		9.0 /tpgdrop <title>
+--		9.1 /tpgdrop all
+--
 --	06. Nodes
 --
 --		1.0 travelpoints:transporter_pad
@@ -66,6 +75,61 @@
 --------------------------------------------------------------------------------
 01. Changelog
 --------------------------------------------------------------------------------
+
+	1.4 2015-03-27
+	
+		! This version adds global travelpoints as requested by dgm5555.
+		! This version does not break existing travelpoint collections. ABM will
+			automatically update existing transporter pads for formspec changes.
+		+ init.lua - Added privilege "tpglobal".
+		* functions.lua/travelpoints.get_travelpoints_table()
+			Added parameter "mode".
+			Added condition for opening either user's table or the global table.
+		* Updated all calls to travelpoints.get_travelpoints_table().
+		* functions.lua/travelpoints.save_travelpoints_table()
+			Added parameter "mode".
+			Added condition for opening either user's table or the global table.
+		* Updated all calls to travelpoints.save_travelpoints_table().
+		+ init.lua - Added chat command "tpgset".
+		* functions.lua/travelpoints.get_travelpoints_array()
+			Added parameter "mode".
+			Added condition for opening either user's table or the global table.
+		* Updated all calls to travelpoints.get_travelpoints_array().
+		+ init.lua - Added chat command "tpggo".
+		+ init.lua - Added chat command "tpgdrop".
+		* functions.lua/travelpoints.get_formspec()
+			Added parameter "mode".
+			Renamed button "List Travelpoints" to "My Travelpoints".
+			Added button "Global Travelpoints".
+			Removed button "Save" (Saves automatically with each modification.)
+			Added button "Exit".
+			Moved timestamp and modstamp text.
+			Added text for mod version.
+		! Mod now requires at least version 0.4.10 of Minetest for changes
+			in formspec.
+		+ functions.lua/travelpoints.on_destruct()
+		+ functions.lua/travelpoints.after_place_node()
+		+ functions.lua/travelpoints.on_receive_fields()
+		+ functions.lua/travelpoints.can_dig()
+		* nodes.lua
+			Transporter_pad definition now uses shared call backs.
+			Transporter_pad_active definition now uses shared call backs.
+		! Players with "server" privilege can now dig active transporter.
+		* functions.lua/travelpoints.get_infotext() - Removed "Placed by "
+			text, now just shows pad owner's name in parentheses.
+		! Added version and source meta tags to pad nodes.
+		* nodes.lua - ABM now updates old pads for changes in meta data.
+		+ functions.lua/travelpoints.set_pad_destination()
+		* functions.lua/travelpoints.get_travelpoints_array() no longer
+			prepends 'none' to the travelpoints array.
+		* Removed all "- 1" math that compensated for the extra index in the
+			travelpoints array.
+		* init.lua - Chat command "/travelpoints", fixed display for those with
+			server privilege.
+		* readme.txt 
+			Rewrote "About Travelpoints" section.
+			Added chat commands "/tpgset", "/tpggo" and "/tpgdrop".
+			Fixed minor errors.			
 
 	1.3 2015-03-24
 	
@@ -115,16 +179,33 @@
 02. About Travelpoints
 --------------------------------------------------------------------------------
 
-	This mod is for Minetest 0.4.8 or the latest build.
+	This mod is for Minetest 0.4.10 or later.
 	
-	Save world specific bookmarks to locations you travel to as "travelpoints",
-	then easily teleport to those travelpoints.
-
-	You can also create transporter pads whose destination can be set to an
-	existing travelpoint, no need to ever enter coords by hand.
-
-	General Usage
+	Singleplayer
 	
+		Save world specific bookmarks to locations you travel to as
+		"travelpoints",	then easily teleport to those travelpoints.
+
+		You can also create transporter pads whose destination can be set to an
+		existing travelpoint, no need to ever enter coords by hand.
+		
+		While meant for multiplayer servers, the global travelpoints features
+		are available in singleplayer mode.
+
+	Multiplayer
+	
+		Each user with the "travelpoints' privilege can set and drop their own
+		collection of travelpoints. This privilege also allows the use of global
+		travelpoints.
+		
+		Users with the "tpglobal" privilege can set and drop global
+		travelpoints.
+		
+		Users with the "travelpads" privilege can place transporter pads which
+		can be set to one of their own travelpoints or to a global travelpoint.
+	
+	Chat Commands
+		
 		The travelpoints mod allows you to save world specific, location
 		bookmarks to the places you travel using "/tpset <title>".
 		
@@ -138,29 +219,55 @@
 		If you want to delete an old travelpoint you no longer need, use
 		"/tpdrop <title>".
 		
-		Make transporter pads for those travelpoints you use quite often.
+		For setting a global travelpoint, use "/tpgset". For listing and using
+		global travelpoints, use "/tpggo". For dropping a global travelpoint
+		use "/tpgdrop".
 		
-		After placing a transporter pad, and right clicking it you can see a
-		list of your existing travelpoints, allowing you to choose one as the
-		destination of the transporter pad.
+		For more commands, and more thorough explanation of the above commands,
+		see section 5 of this file below.
+
+	Transporter Pads
+		
+		Transporter pads allow you to fast travel without having to use chat
+		commands. They are useful in large complexes so you can go from one area
+		or floor to another just by walking onto a pad.
+		
+		Place a transporter pad where you want it, then right click it. There
+		can sometimes be a moment of lag between the time you place it and when
+		it will let you access its interface.
+		
+		Before you can choose a destination for the pad, you must list the
+		available travelpoints. Press "My Travelpoints" to list your own, or
+		press "Global Travelpoints" to list the global collection.
+		
+		When the list appears you can then choose a destination for the pad.
+		
+		After choosing a destination the list will clear, and the pad will
+		become active.
+		
+		You can change the destination any time you need to.
+		
+		To list all the transporter pads you have placed use the chat command
+		"/travelpads".
 		
 		When playing multiplayer you can also set usage modes, allowing only you
 		to use the transporter pad, anyone to use the pad, you and a list of
 		players, or everyone except a list of players.
 		
-		There are also decorative nodes. One is a light that you can place above
-		the transporter pad. As well as a receiving pad which you can place at
-		the destination of a transporter pad with a light above it for show.
+		There are also decorative nodes, one is a receiving pad that you can
+		place at the destination of your transporter pad, the other is a light
+		that can be placed above either your transporter pad or receiving pad.
 		
-		For more commands, and more thorough explanation of the above
-		commands, see section 5 of this file below.
-	
+		For more information about the nodes included in this mod see section 6
+		of this file below.
+		
 	Restrictions
 	
-		There are no restrictions in singleplayer mode, but those running
-		multiplayer servers are able to set restrictions in the 
+		There are no restrictions in singleplayer mode.
+
+		Admins of multiplayer servers are able to set restrictions in the 
 		travelpoints/config.lua file, as well as set world specific restrictions
-		using /travelpoints set <restriction> <value> in game.
+		using "/travelpoints set <restriction> <value>" in game.
 		
 		Server administrators can restrict the following features:
 		
@@ -188,7 +295,7 @@
 03. Install Mod
 --------------------------------------------------------------------------------
 
-	This mod is for Minetest 0.4.8 or the latest build.
+	This mod is for Minetest 0.4.10 or later.
 	
 	Extract archive, and rename directory "travelpoints-master" to
 	"travelpoints".
@@ -230,6 +337,9 @@
 		All player travelpoint tables are serialized and saved in the
 		"travelpoints_tables" directory of the current world as
 		<player_name>.tpt.
+		
+		The serialized global travelpoints are saved in the world's root
+		directory as "travelpoints_global.tpt"
 
 	----------------------------------------------------------------------------
 	1.0 /travelpoints
@@ -240,14 +350,19 @@
 		Provides the player with information about the version of Travelpoints
 		the server is running, with an output like:
 		
-			Travelpoints -!- Running Travelpoints version 1.2 released on 2013-12-21.
+		Mutiplayer
+
+			Travelpoints -!- Running Travelpoints version 1.4 released on 2015-03-27.
 			Travelpoints -!- Restrictions:
-			Travelpoints -!- Max Travelpoints: [35] You have: [0]
-			Travelpoints -!- Max Transporter Pads: [25] You have [0]
+			Travelpoints -!- Max Travelpoints: [35] You have: [12]
+			Travelpoints -!- Max Transporter Pads: [25] You have [6]
 			Travelpoints -!- Cooldown: [5 minutes] Your cooldown is: [none]
 			Travelpoints -!- Back Location: [not cleared after use]
 			
-		In singleplayer mode the restrictions are not displayed.
+		Singleplayer
+			
+			Travelpoints -!- Running Travelpoints version 1.4 released on 2015-03-27.
+
 			
 	----------------------------------------------------------------------------
 	1.1 /travelpoints set
@@ -276,8 +391,7 @@
 	
 		Requires "travelpoints" privilege.
 		
-		Saves a new travelpoint at the player's current position for the current
-		world.
+		Saves a new travelpoint at the player's position for the current world.
 		
 	----------------------------------------------------------------------------
 	2.1 /tpset <title> <desc>
@@ -285,8 +399,8 @@
 	
 		Requires "travelpoints" privilege.
 		
-		Saves a new travelpoint at the player's current position with a 
-		description for the current world.
+		Saves a new travelpoint at the player's position with a description for
+		the current world.
 		
 	----------------------------------------------------------------------------
 	3.0 /tpgo
@@ -340,6 +454,59 @@
 		
 		Lists all the player's placed transporter pads for the current world.
 		
+	----------------------------------------------------------------------------
+	7.0 /tpgset <title>
+	----------------------------------------------------------------------------
+	
+		Requires "tpglobal" privilege.
+		
+		Saves a new global travelpoint at the player's position for the	current
+		world.
+		
+	----------------------------------------------------------------------------
+	7.1 /tpgset <title> <desc>
+	----------------------------------------------------------------------------
+	
+		Requires "tpglobal" privilege.
+		
+		Saves a new global travelpoint at the player's position with a
+		description for the current world.
+
+	----------------------------------------------------------------------------
+	8.0 /tpggo
+	----------------------------------------------------------------------------
+	
+		Requires "travelpoints" privilege.
+		
+		Provides a list of global travelpoints for the current world.
+
+	----------------------------------------------------------------------------
+	8.1 /tpggo <title>
+	----------------------------------------------------------------------------
+	
+		Requires "travelpoints" privilege.
+		
+		Teleports player to the given global travelpoint.
+		
+		Also saves the position the player used the command at for use with the
+		/tpback command.
+		
+	----------------------------------------------------------------------------
+	9.0 /tpgdrop <title>
+	----------------------------------------------------------------------------
+	
+		Requires "tpglobal" privilege.
+		
+		Deletes the specified global travelpoint for the current world.
+	
+	----------------------------------------------------------------------------
+	9.1 /tpgdrop all
+	----------------------------------------------------------------------------
+	
+		Requires "tpglobal" and "server" privileges.
+		
+		Deletes all global travelpoints for the current world.
+
 --------------------------------------------------------------------------------
 06. Nodes
 --------------------------------------------------------------------------------
@@ -350,23 +517,29 @@
 
 		Requires "travelpads" privilege to place this node in the world.
 		
-		Once placed, the owner can right click it and use the form to set one
-		of their existing travelpoints as the transporter pad's destination.
+		Once placed, the owner can right click it to access the interface where
+		they can set a destination to one of their own travelpoints or to one
+		of the global travelpoints.
 		
-		Transporter pads have four usage modes the owner can set:
+		In multiplayer, the transporter pads have four usage modes the owner
+		can set:
 			
 			1. "Owner Only"
 			2. "Everyone"
 			3. "Owner and..." (list of players)
 			4. "Everyone except..." (list of players)
 		
-		A transporter pad can not be dug if it has a destination set.
+		Only the owner of a transporter pad can modify its settings.
 		
-		Only the owner or someone with "server" privilege can unset and dig a
-		transporter pad.
-	
-		Since anyone can view a transporter pad's form, the list of travelpoints
-		is automatically cleared each time the transporter pad is modified.
+		The owner of the transporter pad can dig it only if they unset the
+		destination first.
+		
+		A player with "server" privilege can dig a transporter_pad whether it
+		has a destination or not.
+		
+		Since anyone can view a transporter pad's interface, the list of
+		travelpoints is automatically cleared each time the destination is
+		modified.
 		
 		A. Recipe
 		
@@ -411,7 +584,7 @@
 	----------------------------------------------------------------------------
 
 		This is a decorative node. Place it at the destination of a transporter
-		pad act as a receiving pad.
+		pad to act as a receiving pad.
 		
 		A. Recipe
 		

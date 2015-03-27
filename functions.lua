@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.3                            2015-03-24
+-- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
 --
 -- By Racso Rhodes
 --
@@ -19,6 +19,8 @@
 --
 -- Functions
 --
+--		travelpoints.after_place_node()
+--		travelpoints.can_dig()
 --		travelpoints.default_restrictions()
 --		travelpoints.get_duration()
 --		travelpoints.get_formspec()
@@ -30,12 +32,15 @@
 --		travelpoints.get_travelpoints_table()
 --		travelpoints.get_world_restrictions()
 --		travelpoints.is_empty()
+--		travelpoints.on_destruct()
+--		travelpoints.on_receive_fields()
 --		travelpoints.player_can_use_pad()
 --		travelpoints.player_exists()
 --		travelpoints.player_in_players()
 --		travelpoints.print_notice()
 --		travelpoints.save_travelpoints_table()
 --		travelpoints.save_world_restrictions()
+--		travelpoints.set_pad_destination()
 --		travelpoints.swap_node()
 --		travelpoints.validate_config()
 --		travelpoints.validate_desc()
@@ -45,9 +50,157 @@
 --
 --------------------------------------------------------------------------------
 
+--[[
+
+		Meta Data 1.4d
+		
+		string("location")
+		string("owner")
+		string("title")
+		string("destination")
+		string("source")
+		string("version")
+		int("timestamp")
+		int("modstamp")
+		
+		int("utp_index") \ tp_index
+		int("gtp_index") / 
+		
+		int("mode_index")
+		string("players")
+		
+		string("user_travelpoints_array")   \ tp_array
+		string("global_travelpoints_array") /
+		
+		string("formspec")
+		string("infotext")
+		
+		
+
+]]--
+
+
 --------------------------------------------------------------------------------
 -- Functions
 --------------------------------------------------------------------------------
+
+--[After Place Node]------------------------------------------------------------
+--
+--	Node callback function.
+--	Builds the default meta values for the placed node.
+--
+function travelpoints.after_place_node(pos, placer)
+
+	-- Get node metadata.
+	local meta = minetest.get_meta(pos)
+
+	-- Get placer's name.
+	local name = placer:get_player_name()
+
+	-- Get player's travelpad count for this world.
+	local travelpad_count = travelpoints.travelpad_log(name, meta, "count")
+
+	-- Verify privs.
+	if not minetest.get_player_privs(name)["travelpads"] then
+
+		-- Report
+		travelpoints.print_notice(name, "You do not have the privilege to place transporter pads.")
+
+		-- Remove travelpad.
+		minetest.remove_node(pos)
+
+		-- Drop travelpad for pickup.
+		minetest.add_item(pos, 'travelpoints:transporter_pad')
+
+	-- Verify status.
+	elseif minetest.get_node(pos).name == "travelpoints:transporter_pad_active" then
+	
+		-- Report
+		travelpoints.print_notice(name, "You can not place an active transporter pad.")
+
+		-- Remove active travelpad.
+		minetest.remove_node(pos)
+
+		-- Drop travelpad for pickup.
+		minetest.add_item(pos, 'travelpoints:transporter_pad')
+	
+	-- Handle maximum_travelpads if it is configured.
+	elseif ( not minetest.is_singleplayer() ) and ( travelpoints.restrictions.max_travelpads > 0 ) and ( travelpad_count >= travelpoints.restrictions.max_travelpads ) and ( not minetest.get_player_privs(name)["server"]) then
+
+		-- Report
+		travelpoints.print_notice(name, "You have already reached your maximum number of transporter pads: " .. travelpoints.restrictions.max_travelpads .. ".")
+
+		-- Remove travelpad.
+		minetest.remove_node(pos)
+
+		-- Drop travelpad for pickup.
+		minetest.add_item(pos, 'travelpoints:transporter_pad')
+
+	else
+
+		-- Set default values.
+		meta:set_string("location", minetest.pos_to_string(pos))
+		meta:set_string("owner", name)
+		meta:set_string("title", "")
+		meta:set_string("destination", "")
+		meta:set_string("source", "") --(Mine/Global)
+		meta:set_string("version", travelpoints.version_number)
+		meta:set_int("timestamp", os.time())
+		meta:set_int("modstamp", 0)
+		meta:set_int("tp_index", 1)
+		meta:set_string("tp_array", "return { }")
+		meta:set_int("mode_index", 1)
+		meta:set_string("players", "return {  }")
+
+		-- Add travelpad to log.
+		travelpoints.travelpad_log(name, meta, "add")
+
+		-- Save default formspec
+		meta:set_string("formspec", travelpoints.get_formspec("", meta))
+
+		-- Save default infotext.
+		meta:set_string("infotext", travelpoints.get_infotext(meta))
+
+	end
+
+end
+
+--[Can Dig]---------------------------------------------------------------------
+--
+--	Node callback function.
+--	Determines if the node can be dug.
+--
+travelpoints.can_dig = function(pos, player)
+
+	-- Get node's metadata.
+	local meta = minetest.get_meta(pos)
+
+	-- Get player's name.
+	local name = player:get_player_name()
+
+	-- Dug by admin?
+	if minetest.get_player_privs(name)["server"] then
+		
+		return true
+	
+	-- Dug by owner?
+	elseif meta:get_string("owner") == name then
+
+		-- Check if travelpad is "offline".
+		if meta:get_string("destination") == "" then
+			return true
+		else
+			travelpoints.print_notice(name, "A transporter pad can not be dug unless its destination is unset.")
+			return false
+		end
+
+	-- Dug by Anyone else.
+	else
+		travelpoints.print_notice(name, "You can not dig a transporter pad you do not own.")
+		return false
+	end
+
+end
 
 --[Default Restrictions]--------------------------------------------------------
 --
@@ -186,35 +339,54 @@ end
 --
 --	Build formspec for travelpoints:transporter_pad/_active.
 --
-function travelpoints.get_formspec(meta)
+function travelpoints.get_formspec(mode, meta) -- mode(|user|global)
 
 	-- Pull metadata.
 	local title = meta:get_string("title")
 	local destination = meta:get_string("destination")
+	local source = meta:get_string("source")
 	local timestamp = meta:get_int("timestamp")
 	local modstamp = meta:get_int("modstamp")
-	local travelpoints_array = minetest.deserialize(meta:get_string("travelpoints_array"))
+	local version = meta:get_string("version")
+	local tp_array = minetest.deserialize(meta:get_string("tp_array"))
 	local tp_index = meta:get_int("tp_index")
-	local tp_count = ""
+	local tp_count = 0
 	local mode_index = meta:get_int("mode_index")
 	local players = minetest.deserialize(meta:get_string("players"))
 
 	-- Get travelpoint count.
-	if #travelpoints_array > 1 then
-		tp_count = #travelpoints_array - 1
+	if #tp_array > 0 then
+		tp_count = #tp_array
 	end
 
-	-- Convert travelpoints_array to string.
-	local tp_string = table.concat(travelpoints_array, ",")
-
+	-- Convert travelpoints array to string.
+	local tp_string = table.concat(tp_array, ",")
+	
 	-- Set status
 	local status
 	if (title ~= "") and (destination ~= "") then
-		status = "Destination: " .. title .. " " .. destination
+		status = "Destination: " .. title .. " " .. destination .. " (" .. source .. ")"
 	else
 		status = "Offline"
 	end
 
+	-- Set list label
+	local list_label
+	if mode == "user" then
+		list_label = "My Travelpoints: " .. tp_count
+	elseif mode == "global" then
+		list_label = "Global Travelpoints: " .. tp_count
+	else
+		list_label = "Travelpoints:"
+	end
+	
+	-- Set tp string
+	if mode == "user" then
+		tp_string = "user_list;" .. tp_string .. ";" .. tp_index
+	else
+		tp_string = "global_list;" .. tp_string .. ";" .. tp_index
+	end
+	
 	-- Set last_modified
 	local last_modified
 	if modstamp > 0 then
@@ -228,13 +400,15 @@ function travelpoints.get_formspec(meta)
 	formspec = formspec .. "size[10,6.8]"
 	formspec = formspec .. "label[0.1,0.0;" .. status .. "]"
 	formspec = formspec .. "box[-0.28,0.6;10.37,0.05;#FFFFFF]"
-	formspec = formspec .. "label[0.1,0.7;Available Travelpoints: " .. tp_count  .."]"
-	formspec = formspec .. "textlist[0.1,1.2;5.7,3.6;travelpoint;" .. tp_string .. ";" .. tp_index .. "]"
-	formspec = formspec .. "button[0.1,4.83;2.9,1;list_travelpoints;List Travelpoints]"
-	formspec = formspec .. "button_exit[3.15,4.83;2.9,1;unset_destination;Unset Destination]"
-	formspec = formspec .. "label[2.5,5.95;Placed on " .. os.date("%Y-%m-%d", timestamp) .. "]"
-	formspec = formspec .. "button_exit[0.1,5.65;2,1;save;Save]"
-	formspec = formspec .. "label[0.1,6.5;Last Modified: " .. last_modified .. "]"
+	formspec = formspec .. "label[0.1,0.7;" .. list_label .."]"
+	formspec = formspec .. "textlist[0.1,1.2;5.7,3.6;" .. tp_string .. "]"
+	formspec = formspec .. "button[0.1,4.83;2.9,1;my_travelpoints;My Travelpoints]"
+	formspec = formspec .. "button[3.15,4.83;2.9,1;global_travelpoints;Global Travelpoints]"
+	formspec = formspec .. "button[0.1,5.65;2.9,1;unset_destination;Unset Destination]"
+	formspec = formspec .. "button_exit[3.15,5.65;2.9,1;exit;Exit]"
+	formspec = formspec .. "label[0.1,6.6;Placed: " .. os.date("%Y-%m-%d", timestamp) .. "]"
+	formspec = formspec .. "label[3.15,6.6;Modified: " .. last_modified .. "]"
+	formspec = formspec .. "label[9.2,6.6;v" .. version .. "]"
 	
 	-- Multiplayer fields.
 	if not minetest.is_singleplayer() then
@@ -284,7 +458,7 @@ function travelpoints.get_infotext(meta)
 	if minetest.is_singleplayer() then
 		return status
 	else
-		return status .. " (Placed by " .. owner .. ")"
+		return status .. " (" .. owner .. ")"
 	end
 end
 
@@ -341,17 +515,17 @@ end
 --	Written initially for travelpoints:transpoerter_pad/_active formspec then
 --	became useful for getting a travelpoint count.
 --
-function travelpoints.get_travelpoints_array(name)
+function travelpoints.get_travelpoints_array(mode, name) -- mode(user/global)
 
-	-- Get travelpoints_table.
-	local travelpoints_table = travelpoints.get_travelpoints_table(name)
-
-	-- Check if travelpoints_table is empty.
+	-- Get table.
+	local travelpoints_table = travelpoints.get_travelpoints_table(mode, name)
+	
+	-- Check if travelpoints table is empty.
 	if not travelpoints.is_empty(travelpoints_table) then
 
 		local travelpoints_array = {}
 
-		-- Step through travelpoints_table to pack travelpoints_array.
+		-- Step through travelpoints table to pack travelpoints array.
 		for key, value in pairs(travelpoints_table) do
 
 			-- Omit keys that begin with an underscore.
@@ -367,14 +541,11 @@ function travelpoints.get_travelpoints_array(name)
 		-- Sort values.
 		table.sort(travelpoints_array, function(A, B) return A < B end)
 
-		-- Add "none" at index 1.
-		table.insert(travelpoints_array, 1, "none")
-
 		return travelpoints_array
 
 	else
 
-		return { "none" }
+		return { }
 
 	end
 
@@ -384,21 +555,33 @@ end
 --
 --	Get player's travelpoints table for the current world.
 --
-function travelpoints.get_travelpoints_table(name)
+function travelpoints.get_travelpoints_table(mode, name) -- mode(user/global), name
 
-	-- Set travelpoints_table file path.
-	local travelpoints_table_file = travelpoints.travelpoints_tables .. travelpoints.delimiter .. name .. ".tpt"
-
-	-- Open player's travelpoints_table file for reading.
+	local travelpoints_table_file
+	
+	-- Set travelpoints table file path.
+	if mode == "user" then
+		
+		-- User's table.
+		travelpoints_table_file = travelpoints.travelpoints_tables .. travelpoints.delimiter .. name .. ".tpt"
+		
+	else
+		
+		-- Global table.
+		travelpoints_table_file = travelpoints.worldpath .. travelpoints.delimiter .. "travelpoints_global.tpt"
+	
+	end
+	
+	-- Open travelpoints table file for reading.
 	local read_handle, read_error = io.open(travelpoints_table_file, "r")
 
-	-- Check if travelpoints_table file failed to open. (Might not exist yet.)
+	-- Check if travelpoints table file failed to open. (Might not exist yet.)
 	if read_error ~= nil then
 
-		-- Create travelpoints_table file.
+		-- Create travelpoints table file.
 		local write_handle, write_error = io.open(travelpoints_table_file, "w")
 
-		-- Check if travelpoints_table file could not be created.
+		-- Check if travelpoints table file could not be created.
 		if write_error ~= nil then
 
 			-- Report error to player.
@@ -530,6 +713,393 @@ function travelpoints.is_empty(table_name)
 
 end
 
+--[On Destruct]-----------------------------------------------------------------
+--
+--	Node callback function.
+--	Removes entry from travelpad log when pad is destroyed.
+--
+function travelpoints.on_destruct(pos)
+
+	-- Get nodes metadata.
+	local meta = minetest.get_meta(pos)
+
+	if meta:get_string("owner") ~= "" then
+
+		-- Remove travelpad from log.
+		travelpoints.travelpad_log(meta:get_string("owner"), meta, "remove")
+
+	end
+
+end
+
+--[On Receive Fields]-----------------------------------------------------------
+--
+--	Node callback function.
+--	Handles data from form.
+--
+function travelpoints.on_receive_fields(pos, formname, fields, sender)
+
+	local meta = minetest.get_meta(pos)
+
+	local name = sender:get_player_name()
+
+	local owner = meta:get_string("owner")
+	
+	-- Only pad owner can make changes.
+	if name == owner then
+
+		--------------------------------------------------------------------
+		-- Button "My Travelpoints"
+		--------------------------------------------------------------------
+		--
+		-- This lists the user's travelpoints.
+		--
+		if fields.my_travelpoints == "My Travelpoints" then
+
+			-- Get the user's travelpoints as an array.
+			local tp_array = travelpoints.get_travelpoints_array("user", owner)
+
+			-- Serialize the travelpoints array.
+			local tp_array = minetest.serialize(tp_array)
+
+			-- Set the travelpoints array.
+			meta:set_string("tp_array", tp_array)
+
+			-- Set pad to "Offline".
+			--
+			-- Assumed that player chose to refresh in order to point the pad to
+			-- new coords.
+			--
+			meta:set_string("title", "")
+			meta:set_string("destination", "")
+			meta:set_int("tp_index", 0)
+
+			-- Save formspec.
+			meta:set_string("formspec", travelpoints.get_formspec("user", meta))
+
+			-- Save infotext.
+			meta:set_string("infotext", travelpoints.get_infotext(meta))
+
+		--------------------------------------------------------------------
+		-- Button "Global Travelpoints"
+		--------------------------------------------------------------------
+		--
+		-- This syncs the node's global travelpoints array with the current
+		-- global travelpoints table.
+		--
+		elseif fields.global_travelpoints == "Global Travelpoints" then
+
+			-- Get the user's travelpoints as an array.
+			local tp_array = travelpoints.get_travelpoints_array("global", owner)
+
+			-- Serialize the travelpoints array.
+			local tp_array = minetest.serialize(tp_array)
+
+			-- Set the travelpoints array.
+			meta:set_string("tp_array", tp_array)
+
+			-- Set pad to "Offline".
+			--
+			-- Assumed that player chose to refresh in order to point the pad to
+			-- new coords.
+			--
+			meta:set_string("title", "")
+			meta:set_string("destination", "")
+			meta:set_int("tp_index", 0)
+
+			-- Save formspec.
+			meta:set_string("formspec", travelpoints.get_formspec("global", meta))
+
+			-- Save infotext.
+			meta:set_string("infotext", travelpoints.get_infotext(meta))			
+			
+		--------------------------------------------------------------------
+		-- Text list - select user travelpoint.
+		--------------------------------------------------------------------
+
+		elseif ( fields.user_list ) and ( name == owner) then
+
+			-- Get index value.
+			local index = travelpoints.get_textlist_index(fields.user_list)
+
+			if index ~= meta:get_int("tp_index") then
+
+				-- Get this node's travelpoints array.
+				local tp_array = minetest.deserialize(meta:get_string("tp_array"))
+
+				-- Extract title and destination from array value.
+				local title, destination = string.match(tp_array[index], "^([^ ]+)%s+(.+)")
+
+				-- Remove escapes.
+				destination = string.gsub(destination, "\\", "", 2)
+
+				-- Pads can't teleport to themselves.
+				if destination ~= minetest.pos_to_string(pos) then
+
+					-- Set or clear title and destination meta data.
+					if ( index == 0 ) or ( index > #tp_array ) then
+						meta:set_string("title", "")
+						meta:set_string("destination", "")
+						meta:set_string("source", "")
+						meta:set_int("tp_index", 0)
+					else
+						meta:set_string("title", title)
+						meta:set_string("destination", destination)
+						meta:set_string("source", "Mine")
+						meta:set_int("tp_index", index)
+					end
+
+					meta:set_string("tp_array", "return {  }")
+					
+					-- Save modification timestamp.
+					meta:set_int("modstamp", os.time())
+
+					-- Save formspec.
+					meta:set_string("formspec", travelpoints.get_formspec("", meta))
+
+					-- Save infotext.
+					meta:set_string("infotext", travelpoints.get_infotext(meta))
+
+				else
+
+					-- Report
+					travelpoints.print_notice(name, "Error: You can not set the transporter pad's location as its destination.")
+
+				end
+
+			end
+
+		--------------------------------------------------------------------
+		-- Text list - select global travelpoint.
+		--------------------------------------------------------------------
+
+		elseif fields.global_list then
+
+			-- Get index value.
+			local index = travelpoints.get_textlist_index(fields.global_list)
+
+			if index ~= meta:get_int("tp_index") then
+
+				-- Get this node's travelpoints array.
+				local tp_array = minetest.deserialize(meta:get_string("tp_array"))
+
+				-- Extract title and destination from array value.
+				local title, destination = string.match(tp_array[index], "^([^ ]+)%s+(.+)")
+
+				-- Remove escapes.
+				destination = string.gsub(destination, "\\", "", 2)
+
+				-- Pads can't teleport to themselves.
+				if destination ~= minetest.pos_to_string(pos) then
+
+					-- Set or clear title and destination meta data.
+					if ( index == 0 ) or ( index > #tp_array ) then
+						meta:set_string("title", "")
+						meta:set_string("destination", "")
+						meta:set_string("source", "")
+						meta:set_int("tp_index", 0)
+					else
+						meta:set_string("title", title)
+						meta:set_string("destination", destination)
+						meta:set_string("source", "Global")
+						meta:set_int("tp_index", index)
+					end
+					
+					meta:set_string("tp_array", "return {  }")
+
+					-- Save modification timestamp.
+					meta:set_int("modstamp", os.time())
+
+					-- Save formspec.
+					meta:set_string("formspec", travelpoints.get_formspec("", meta))
+
+					-- Save infotext.
+					meta:set_string("infotext", travelpoints.get_infotext(meta))
+
+				else
+
+					-- Report
+					travelpoints.print_notice(name, "Error: You can not set the transporter pad's location as its destination.")
+
+				end
+
+			end
+			
+		--------------------------------------------------------------------
+		-- Button "Add Player"
+		--------------------------------------------------------------------
+
+		elseif ( fields.add_player == "Add Player" ) and ( string.len(fields.player_name) > 0 ) then
+
+			local player = fields.player_name
+
+			-- Validate input.
+			if not string.find(player, "^[^%w_]+$") then
+
+				-- Owner can't add their name.
+				if player ~= name then
+
+					-- Check if player exists.
+					if travelpoints.player_exists(player) then
+
+						-- Check if player is already in array.
+						if not travelpoints.player_in_players(player, meta:get_string("players")) then
+
+							-- Get players array.
+							local players = minetest.deserialize(meta:get_string("players"))
+
+							-- Add player.
+							table.insert(players, player)
+
+							-- Sort values.
+							if #players > 1 then
+								table.sort(players, function(A, B) return A < B end)
+							end
+
+							-- Save players array.
+							meta:set_string("players", minetest.serialize(players))
+
+							-- Save modification timestamp.
+							meta:set_int("modstamp", os.time())
+
+							-- Save formspec.
+							meta:set_string("formspec", travelpoints.get_formspec("", meta))
+
+						else
+
+							-- Report
+							travelpoints.print_notice(name, "Error: \"" .. player .. "\" is already listed.")
+
+						end
+
+					else
+
+						-- Report
+						travelpoints.print_notice(name, "Error: \"" .. player .. "\" is not an existing player for this world.")
+
+					end
+
+				else
+
+					-- Report
+					travelpoints.print_notice(name, "Error: You can't add your own name.")
+
+				end
+
+			else
+
+				-- Report
+				travelpoints.print_notice(name, "Error: The name you entered contains disallowed characters.")
+
+			end
+
+		--------------------------------------------------------------------
+		-- Button "Remove Player"
+		--------------------------------------------------------------------
+
+		elseif fields.remove_player == "Remove Player" then
+
+			local player = fields.players
+
+			-- Get players array.
+			local players = minetest.deserialize(meta:get_string("players"))
+
+			local player_removed = false
+
+			-- Step through players to find player.
+			for index, value in ipairs(players) do
+
+				-- Remove player when found.
+				if value == player then
+					table.remove(players, index)
+					player_removed = true
+					break
+				end
+
+			end
+
+			-- Check if a player was removed.
+			if player_removed then
+
+				-- Sort values.
+				if #players > 1 then
+					table.sort(players, function(A, B) return A < B end)
+				end
+
+				-- Save players array.
+				meta:set_string("players", minetest.serialize(players))
+
+				-- Save modification timestamp.
+				meta:set_int("modstamp", os.time())
+
+				-- Save formspec.
+				meta:set_string("formspec", travelpoints.get_formspec("", meta))
+
+			end
+
+		--------------------------------------------------------------------
+		-- Button "Unset Destination"
+		--------------------------------------------------------------------
+		elseif fields.unset_destination == "Unset Destination" then
+
+			-- Clear destination.
+			meta:set_string("title", "")
+			meta:set_string("destination", "")
+			meta:set_string("source", "")
+			meta:set_int("tp_index", 0)
+			meta:set_string("tp_array", "return {  }")
+
+			-- Save modification timestamp.
+			meta:set_int("modstamp", os.time())
+
+			-- Save formspec.
+			meta:set_string("formspec", travelpoints.get_formspec("", meta))
+
+			-- Save infotext.
+			meta:set_string("infotext", travelpoints.get_infotext(meta))
+
+		--------------------------------------------------------------------
+		-- Drop down list "Pad Usage Mode"
+		--------------------------------------------------------------------
+		elseif fields.mode then
+		
+			-- Pad Access Mode
+			if ( name == owner ) then
+				if fields.mode then
+					local mode_table = travelpoints.get_pad_modes("table")
+					meta:set_int("mode_index", mode_table[fields.mode])
+				end
+			end
+
+			-- Save modification timestamp.
+			meta:set_int("modstamp", os.time())
+
+			-- Save formspec.
+			meta:set_string("formspec", travelpoints.get_formspec("", meta))
+		
+		-- Makes no sense but this block only triggers when the Escape key is
+		-- pressed, will not work with button_exit which also sends quit=>true
+		-- on top of it's own field.
+		elseif fields.quit == "true" then
+		
+			-- Clear list.
+			meta:set_int("tp_index", 0)
+			meta:set_string("tp_array", "return {  }")
+			
+			-- Save formspec.
+			meta:set_string("formspec", travelpoints.get_formspec("", meta))
+
+		end
+
+	else
+
+		-- Report
+		travelpoints.print_notice(name, "This transporter pad belongs to \"" .. owner .. "\", you can not modify it")
+
+	end
+
+end
+
 --[Player Can Use Pad]----------------------------------------------------------
 --
 --	Returns a boolean value for whether or not the player can use the pad.
@@ -641,19 +1211,31 @@ end
 
 --[Save travelpoints_table]----------------------------------------------------------------
 --
---	Saves any changes to the travelpoints table to the player's travelpoints_table file.
+--	Saves any changes to the travelpoints table.
 --
-function travelpoints.save_travelpoints_table(name, travelpoints_table)
+function travelpoints.save_travelpoints_table(mode, name, travelpoints_table) -- mode(user/global)
 
 	-- Validate travelpoints_table.
 	if ( travelpoints_table == nil ) or ( type(travelpoints_table) ~= "table" ) then
 		return false
 	end
-
-	-- Set travelpoints_table file path.
-	local travelpoints_table_file = travelpoints.travelpoints_tables .. travelpoints.delimiter .. name .. ".tpt"
-
-	-- Open travelpoints_table file for writing.
+	
+	local travelpoints_table_file
+	
+	-- Set travelpoints table file path.
+	if mode == "user" then
+		
+		-- User's table.
+		travelpoints_table_file = travelpoints.travelpoints_tables .. travelpoints.delimiter .. name .. ".tpt"
+		
+	else
+		
+		-- Global table.
+		travelpoints_table_file = travelpoints.worldpath .. travelpoints.delimiter .. "travelpoints_global.tpt"
+	
+	end
+	
+	-- Open travelpoints table file for writing.
 	local write_handle, write_error = io.open(travelpoints_table_file, "w")
 
 	-- Check for error.
@@ -708,6 +1290,84 @@ function travelpoints.save_world_restrictions(restrictions)
 
 	return true
 	
+end
+
+--[Set Pad Destination]---------------------------------------------------------
+--
+--	Sets pad meta values for the destination chosen by user.
+--
+
+	-- Get index value.
+	--local index = travelpoints.get_textlist_index(fields.global_list)
+
+
+function travelpoints.set_pad_destination(mode, index, meta)
+
+	local user_travelpoints_array, global_travelpoints_array
+	
+	if mode == "user" then
+	
+		if index ~= meta:get_int("gtp_index") then
+			
+			-- Get this node's global travelpoints array.
+			global_travelpoints_array = minetest.deserialize(meta:get_string("global_travelpoints_array"))
+		
+		end
+	
+	else
+	
+	end
+
+	if index ~= meta:get_int("gtp_index") then
+
+		-- Get this node's global travelpoints array.
+		local global_travelpoints_array = minetest.deserialize(meta:get_string("global_travelpoints_array"))
+
+		-- Extract title and destination from array value.
+		local title, destination = string.match(global_travelpoints_array[index], "^([^ ]+)%s+(.+)")
+
+		-- Remove escapes.
+		destination = string.gsub(destination, "\\", "", 2)
+
+		-- Pads can't teleport to themselves.
+		if destination ~= minetest.pos_to_string(pos) then
+
+			-- Set or clear title and destination meta data.
+			if ( index == 1 ) or ( index > #global_travelpoints_array ) then
+				meta:set_string("title", "")
+				meta:set_string("destination", "")
+				meta:set_string("source", "")
+				meta:set_int("gtp_index", 1)
+			else
+				meta:set_string("title", title)
+				meta:set_string("destination", destination)
+				meta:set_string("source", "Global")
+				meta:set_int("gtp_index", index)
+			end
+			
+			meta:set_string("global_travelpoints_array", "return {  }")
+			meta:set_int("utp_index", 1)
+			meta:set_string("user_travelpoints_array", "return {  }")
+
+			-- Save modification timestamp.
+			meta:set_int("modstamp", os.time())
+
+			-- Save formspec.
+			meta:set_string("formspec", travelpoints.get_formspec("global", meta))
+
+			-- Save infotext.
+			meta:set_string("infotext", travelpoints.get_infotext(meta))
+
+		else
+
+			-- Report
+			travelpoints.print_notice(name, "Error: You can not set the transporter pad's location as its destination.")
+
+		end
+
+
+	end
+
 end
 
 --[Swap Node]-------------------------------------------------------------------
@@ -855,7 +1515,7 @@ end
 function travelpoints.travelpad_log(name, meta, action)
 
 	-- Get travelpoints_table.
-	local travelpoints_table = travelpoints.get_travelpoints_table(name)
+	local travelpoints_table = travelpoints.get_travelpoints_table("user", name)
 	
 	-- Initialize _travelpads if needed.
 	if travelpoints_table._travelpads == nil then
@@ -889,7 +1549,7 @@ function travelpoints.travelpad_log(name, meta, action)
 			travelpoints_table._travelpads[location] = meta:get_int("timestamp")
 			
 			-- Save travelpoints_table.
-			travelpoints.save_travelpoints_table(name, travelpoints_table)
+			travelpoints.save_travelpoints_table("user", name, travelpoints_table)
 			
 			return
 			
@@ -907,7 +1567,7 @@ function travelpoints.travelpad_log(name, meta, action)
 			travelpoints_table._travelpads[location] = nil
 			
 			-- Save travelpoints_table.
-			travelpoints.save_travelpoints_table(name, travelpoints_table)
+			travelpoints.save_travelpoints_table("user", name, travelpoints_table)
 		
 			return
 		
