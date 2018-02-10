@@ -367,7 +367,7 @@ minetest.register_chatcommand("tpggo", {
 		-- Get current time.
 		local now = os.time()
 
-		-- Check if coodown needs to be calculated.
+		-- Check if cooldown needs to be calculated.
 		if ( not minetest.is_singleplayer() ) and ( travelpoints.restrictions.cooldown > 0 ) and ( not minetest.get_player_privs(name)["server"] ) then
 
 			if user_travelpoints_table._cooldown ~= nil then
