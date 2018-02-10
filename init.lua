@@ -72,7 +72,11 @@ travelpoints.delimiter = string.sub(package.config, 1, 1)
 travelpoints.travelpoints_tables = travelpoints.worldpath .. travelpoints.delimiter .. "travelpoints_tables"
 
 -- Create directory if it does not exist.
-os.execute("mkdir \"" .. travelpoints.travelpoints_tables .. "\"")
+if minetest.mkdir then
+	minetest.mkdir(travelpoints.travelpoints_tables)
+else
+	os.execute("mkdir \"" .. travelpoints.travelpoints_tables .. "\"")
+end
 
 -- Set version for /travelpoints.
 travelpoints.version_number = "1.4"
