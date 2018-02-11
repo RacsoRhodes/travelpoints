@@ -78,7 +78,7 @@
 
 	1.5 2018-02-10
 		
-		! This version corrects the directory creation error that begain with
+		! This version corrects the directory creation error that began with
 			Minetest Version 0.4.16.
 		! Thanks to GitHub user "ritschwumm" for the changes in this version.
 		* init.lua - Method for world table directory creation updated from

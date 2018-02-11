@@ -81,10 +81,10 @@ else
 end
 
 -- Set version for /travelpoints.
-travelpoints.version_number = "1.4"
+travelpoints.version_number = "1.5"
 
 -- Set version date for /travelpoints.
-travelpoints.version_date = "2015-03-27"
+travelpoints.version_date = "2018-02-10"
 
 -- Initialize restrictions table.
 travelpoints.restrictions = {}
