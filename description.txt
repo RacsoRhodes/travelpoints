@@ -1,7 +1,9 @@
-Travelpoints 1.4 2015-03-27
+Travelpoints 1.5 2018-02-10
 
 Save world specific bookmarks to locations you travel to as "travelpoints", then easily teleport to those travelpoints.
 
 You can also create transporter pads whose destination can be set to an existing travelpoint, no need to ever enter coords by hand.
 
 For a complete list of available chat commands see readme.txt.
+
+Thanks to GitHub user "ritschwumm" for corrections in this release.

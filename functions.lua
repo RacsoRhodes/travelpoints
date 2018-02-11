@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
+-- Minetest Mod "Travelpoints" Version 1.5                            2018-02-10
 --
 -- By Racso Rhodes
 --
@@ -473,7 +473,7 @@ function travelpoints.get_location(name)
 
 	-- Round down values and adjust.
 	pos.x = math.floor(pos.x + 0.5)
-	pos.y = math.floor(pos.y) + 0.5
+	pos.y = math.floor(pos.y) + 0.5 -- Correction by GitHub user "ritschwumm".
 	pos.z = math.floor(pos.z + 0.5)
 
 	return pos

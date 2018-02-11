@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
+-- Minetest Mod "Travelpoints" Version 1.5                            2018-02-10
 --
 -- By Racso Rhodes
 --
@@ -73,8 +73,10 @@ travelpoints.travelpoints_tables = travelpoints.worldpath .. travelpoints.delimi
 
 -- Create directory if it does not exist.
 if minetest.mkdir then
+	-- Added in Minetest 0.4.13 (Thanks to GitHub user "ritschwumm" for pointing it out.)
 	minetest.mkdir(travelpoints.travelpoints_tables)
 else
+	-- For Minetest versions < 0.4.13
 	os.execute("mkdir \"" .. travelpoints.travelpoints_tables .. "\"")
 end
 

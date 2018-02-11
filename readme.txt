@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
+-- Minetest Mod "Travelpoints" Version 1.5                            2018-02-10
 --
 -- By Racso Rhodes
 --
@@ -75,6 +75,18 @@
 --------------------------------------------------------------------------------
 01. Changelog
 --------------------------------------------------------------------------------
+
+	1.5 2018-02-10
+		
+		! This version corrects the directory creation error that begain with
+			Minetest Version 0.4.16.
+		! Thanks to GitHub user "ritschwumm" for the changes in this version.
+		* init.lua - Method for world table directory creation updated from
+			os.execute() to	minetest.mkdir(). Older Minetest versions still
+			supported through os.execute().
+		* functions.lua/travelpoints.get_location() - Y axis capture corrected,
+			no more transporting half inside a node.
+		* init.lua/minetest.register_chatcommand("tpggo" - Fixed comment typo.
 
 	1.4 2015-03-27
 	
