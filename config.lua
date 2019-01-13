@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
+-- Minetest Mod "Travelpoints" Version 1.5                            2018-02-10
 --
 -- By Racso Rhodes
 --

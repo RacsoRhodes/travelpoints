@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 --
--- Minetest Mod "Travelpoints" Version 1.4                            2015-03-27
+-- Minetest Mod "Travelpoints" Version 1.5                            2018-02-10
 --
 -- By Racso Rhodes
 --
@@ -72,13 +72,19 @@ travelpoints.delimiter = string.sub(package.config, 1, 1)
 travelpoints.travelpoints_tables = travelpoints.worldpath .. travelpoints.delimiter .. "travelpoints_tables"
 
 -- Create directory if it does not exist.
-os.execute("mkdir \"" .. travelpoints.travelpoints_tables .. "\"")
+if minetest.mkdir then
+	-- Added in Minetest 0.4.13 (Thanks to GitHub user "ritschwumm" for pointing it out.)
+	minetest.mkdir(travelpoints.travelpoints_tables)
+else
+	-- For Minetest versions < 0.4.13
+	os.execute("mkdir \"" .. travelpoints.travelpoints_tables .. "\"")
+end
 
 -- Set version for /travelpoints.
-travelpoints.version_number = "1.4"
+travelpoints.version_number = "1.5"
 
 -- Set version date for /travelpoints.
-travelpoints.version_date = "2015-03-27"
+travelpoints.version_date = "2018-02-10"
 
 -- Initialize restrictions table.
 travelpoints.restrictions = {}
@@ -363,7 +369,7 @@ minetest.register_chatcommand("tpggo", {
 		-- Get current time.
 		local now = os.time()
 
-		-- Check if coodown needs to be calculated.
+		-- Check if cooldown needs to be calculated.
 		if ( not minetest.is_singleplayer() ) and ( travelpoints.restrictions.cooldown > 0 ) and ( not minetest.get_player_privs(name)["server"] ) then
 
 			if user_travelpoints_table._cooldown ~= nil then
