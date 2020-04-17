@@ -648,7 +648,7 @@ function travelpoints.get_world_restrictions()
 	local restrictions_file = travelpoints.worldpath .. travelpoints.delimiter .. "travelpoints_restrictions.tpt"
 
 	-- Check if file exists
-	if file_exists(restrictions_file) then -- builtin/misc_helpers.lua
+	if travelpoints.file_exists(restrictions_file) then -- builtin/misc_helpers.lua
 	
 		-- Open restrictions file for reading.
 		local read_handle, read_error = io.open(restrictions_file, "r")
@@ -1172,7 +1172,7 @@ function travelpoints.player_exists(player_name)
 			local player_file = travelpoints.worldpath .. travelpoints.delimiter .. "players" .. travelpoints.delimiter .. player_name
 
 			-- Check if player file exists.
-			if file_exists(player_file) then -- builtin/common/misc_helpers.lua
+			if travelpoints.file_exists(player_file) then -- builtin/common/misc_helpers.lua
 				return true
 			else
 				return false
