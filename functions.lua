@@ -19,6 +19,7 @@
 --
 -- Functions
 --
+--		travelpoints.file_exists()
 --		travelpoints.after_place_node()
 --		travelpoints.can_dig()
 --		travelpoints.default_restrictions()
@@ -79,10 +80,25 @@
 
 ]]--
 
-
 --------------------------------------------------------------------------------
 -- Functions
 --------------------------------------------------------------------------------
+
+--[File Exists]------------------------------------------------------------
+--
+--	Checks synchronously as to whether a file exists on disk or not.
+--	It does so by trying to open the file in readable mode (so files that we don't
+--	have permission to read will return as non-existent).
+--
+function travelpoints.file_exists(filename)
+        local f = io.open(filename, "r")
+        if f == nil then
+                return false
+        else
+                f:close()
+                return true
+        end
+end
 
 --[After Place Node]------------------------------------------------------------
 --
